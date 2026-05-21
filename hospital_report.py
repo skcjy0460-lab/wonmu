@@ -143,12 +143,37 @@ html, body, [class*="css"] {
     padding: 8px 18px;
 }
 
-/* 데이터프레임 스타일 */
+/* 데이터프레임 스타일 - 셀 가운데 정렬 */
 .dataframe-container {
     background: var(--card);
     border-radius: 12px;
     padding: 16px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* 데이터프레임 헤더 & 셀 가운데 정렬 */
+[data-testid="stDataFrame"] th {
+    text-align: center !important;
+}
+[data-testid="stDataFrame"] td,
+[data-testid="stDataFrame"] [data-testid="glideDataEditor"] .dvn-scroller .cell-container {
+    text-align: center !important;
+    justify-content: center !important;
+}
+[data-testid="stDataFrame"] [role="columnheader"] {
+    justify-content: center !important;
+}
+[data-testid="stDataFrame"] [role="gridcell"] {
+    justify-content: center !important;
+    text-align: center !important;
+}
+
+/* 사이드바 체크박스·슬라이더 레이블 밝게 */
+[data-testid="stSidebar"] .stCheckbox label,
+[data-testid="stSidebar"] .stSlider label,
+[data-testid="stSidebar"] .stSlider [data-testid="stMarkdownContainer"] p,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+    color: #c8dff5 !important;
 }
 
 /* 사이드바 */
@@ -341,22 +366,57 @@ def make_kpi_html(label, value, delta=None, unit=""):
 COLOR_SEQ = ['#2E86AB','#E84855','#F9C74F','#06D6A0','#8338EC','#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7']
 CHART_TEMPLATE = "plotly_white"
 
+
+def show_centered_df(df, extra_config=None):
+    """모든 컬럼을 가운데 정렬로 st.dataframe 표시"""
+    col_cfg = {}
+    for col in df.columns:
+        dtype = df[col].dtype
+        if pd.api.types.is_integer_dtype(dtype):
+            col_cfg[col] = st.column_config.NumberColumn(col, format="%d")
+        elif pd.api.types.is_float_dtype(dtype):
+            col_cfg[col] = st.column_config.NumberColumn(col, format="%.1f")
+        else:
+            col_cfg[col] = st.column_config.TextColumn(col)
+    if extra_config:
+        col_cfg.update(extra_config)
+    # 문자열 컬럼을 가운데 정렬하는 트릭: 공백 패딩
+    df_show = df.copy()
+    for col in df_show.columns:
+        if df_show[col].dtype == object:
+            df_show[col] = df_show[col].astype(str)
+    st.dataframe(df_show, use_container_width=True, hide_index=True, column_config=col_cfg)
+
+
 def pie_chart(df_count, names_col, values_col, title, color_seq=None):
     colors = color_seq or COLOR_SEQ
     fig = px.pie(
         df_count, names=names_col, values=values_col,
         title=title, color_discrete_sequence=colors,
-        hole=0.42
+        hole=0.45
     )
-    fig.update_traces(textposition='outside', textinfo='percent+label', pull=[0.04]*len(df_count))
+    fig.update_traces(
+        textposition='inside',
+        textinfo='percent+label',
+        insidetextorientation='radial',
+        pull=[0]*len(df_count),
+        textfont_size=12,
+    )
     fig.update_layout(
         template=CHART_TEMPLATE,
         showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.28, xanchor="center", x=0.5),
-        margin=dict(t=50, b=60, l=10, r=10),
+        legend=dict(
+            orientation="v",
+            yanchor="middle", y=0.5,
+            xanchor="left", x=1.02,
+            font=dict(size=11),
+        ),
+        margin=dict(t=55, b=20, l=10, r=120),
         title_font_size=14,
         font_family="Noto Sans KR",
-        height=380,
+        height=360,
+        uniformtext_minsize=10,
+        uniformtext_mode='hide',
     )
     return fig
 
@@ -442,7 +502,7 @@ with st.sidebar:
     top_disease_n = st.slider("주상병 Top N", 5, 20, 10)
     st.markdown("---")
     st.markdown("""
-    <div style="color:#8aaecb; font-size:0.72rem; text-align:center; line-height:1.8;">
+    <div style="color:#c8dff5; font-size:0.78rem; text-align:center; line-height:2.0; font-weight:500;">
         제작: 주식회사 메디엄<br>
         조정윤
     </div>
@@ -456,7 +516,7 @@ now_str = datetime.now().strftime("%Y년 %m월 %d일")
 st.markdown(f"""
 <div class="header-banner">
     <div>
-        <div class="header-title">🏥 의료기관 원무과 월간통계 보고서</div>
+        <div class="header-title">🏥 원무과 월간통계 보고서</div>
         <div class="header-sub">Medical Administration Monthly Statistics Report</div>
     </div>
     <div class="header-creator">
@@ -692,11 +752,10 @@ with tabs[0]:
                 "추세": badge
             })
         compare_df = pd.DataFrame(rows)
-        st.dataframe(compare_df, use_container_width=True, hide_index=True,
-                     column_config={
-                         "추세": st.column_config.TextColumn("추세", width="small"),
-                         "증감률": st.column_config.TextColumn("증감률", width="small"),
-                     })
+        show_centered_df(compare_df, extra_config={
+            "추세": st.column_config.TextColumn("추세", width="small"),
+            "증감률": st.column_config.TextColumn("증감률", width="small"),
+        })
 
         # 전월 비교 막대그래프
         fig_cmp = comparison_bar(
@@ -759,7 +818,7 @@ with tabs[1]:
                 f"{label_curr} 비율": f"{c/total_c*100:.1f}%" if total_c else "-",
                 "증감": f"{c-p:+d}",
             })
-        st.dataframe(pd.DataFrame(tbl), use_container_width=True, hide_index=True)
+        show_centered_df(pd.DataFrame(tbl))
 
 
 # ─────────────────────────────────────────────────
@@ -814,7 +873,7 @@ with tabs[2]:
                 "건강보험": types_c.get('건강보험', 0),
                 "자보": types_c.get('자보', 0),
             })
-        st.dataframe(pd.DataFrame(tbl), use_container_width=True, hide_index=True)
+        show_centered_df(pd.DataFrame(tbl))
 
 
 # ─────────────────────────────────────────────────
@@ -856,7 +915,7 @@ with tabs[3]:
         cross = pd.crosstab(df_curr['진료의사'], df_curr['초재진'])
         cross['합계'] = cross.sum(axis=1)
         cross = cross.sort_values('합계', ascending=False)
-        st.dataframe(cross, use_container_width=True)
+        show_centered_df(cross)
 
         fig_heat = px.imshow(
             cross.drop(columns=['합계']),
@@ -915,14 +974,14 @@ with tabs[4]:
                 f"{label_curr} 비율": f"{c/total_c*100:.1f}%" if total_c else "-",
                 "증감": f"{c-p:+d}",
             })
-        st.dataframe(pd.DataFrame(tbl), use_container_width=True, hide_index=True)
+        show_centered_df(pd.DataFrame(tbl))
 
     # 내원경로 × 환자유형 교차
     if df_curr is not None and '내원경로' in df_curr.columns and '환자유형' in df_curr.columns:
         st.markdown('<div class="section-title">내원경로 × 환자유형 교차분석</div>', unsafe_allow_html=True)
         cross2 = pd.crosstab(df_curr['내원경로'], df_curr['환자유형'])
         cross2['합계'] = cross2.sum(axis=1)
-        st.dataframe(cross2.sort_values('합계', ascending=False), use_container_width=True)
+        show_centered_df(cross2.sort_values("합계", ascending=False))
 
 
 # ─────────────────────────────────────────────────
@@ -1113,7 +1172,7 @@ with tabs[8]:
         df_show = df_curr[display_cols_curr].copy()
         if '접수일자' in df_show.columns:
             df_show['접수일자'] = pd.to_datetime(df_show['접수일자']).dt.strftime('%Y-%m-%d')
-        st.dataframe(df_show, use_container_width=True, hide_index=True)
+        show_centered_df(df_show)
 
     if df_prev is not None:
         st.markdown(f"**{label_prev}** — {len(df_prev):,}건")
@@ -1121,7 +1180,7 @@ with tabs[8]:
         df_show2 = df_prev[display_cols_prev].copy()
         if '접수일자' in df_show2.columns:
             df_show2['접수일자'] = pd.to_datetime(df_show2['접수일자']).dt.strftime('%Y-%m-%d')
-        st.dataframe(df_show2, use_container_width=True, hide_index=True)
+        show_centered_df(df_show2)
 
 
 # ─────────────────────────────────────────────────

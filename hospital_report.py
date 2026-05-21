@@ -247,40 +247,6 @@ def load_detail_file(uploaded_file):
         return None
 
 
-def load_summary_file(uploaded_file):
-    """7월 월간결산 파일 로드 (기존 형식)"""
-    try:
-        xls = pd.ExcelFile(uploaded_file)
-        dfs = []
-        for sheet in xls.sheet_names:
-            df = pd.read_excel(uploaded_file, sheet_name=sheet, header=0)
-            df.columns = df.columns.astype(str).str.strip()
-            col_map = {}
-            for c in df.columns:
-                if '접수일자' in c or '일자' in c:
-                    col_map['접수일자'] = c
-                elif '환자유형' in c:
-                    col_map['환자유형'] = c
-                elif '초재' in c or '초/재' in c:
-                    col_map['초재진'] = c
-                elif '진료의사' in c or '의사' in c:
-                    col_map['진료의사'] = c
-                elif '내원경로' in c:
-                    col_map['내원경로'] = c
-            if '환자유형' not in col_map:
-                continue
-            rename = {v: k for k, v in col_map.items()}
-            df = df.rename(columns=rename)
-            if '접수일자' in df.columns:
-                df['접수일자'] = df['접수일자'].apply(excel_date_to_date)
-            df = df.dropna(subset=['환자유형'])
-            dfs.append(df)
-        if not dfs:
-            return None
-        return pd.concat(dfs, ignore_index=True)
-    except Exception as e:
-        st.error(f"파일 로드 오류: {e}")
-        return None
 
 
 def normalize_route(val):
@@ -470,10 +436,6 @@ with st.sidebar:
     file_prev = st.file_uploader("저번달 (접수현황 xlsx)", type=["xlsx","xls"], key="prev",
                                   label_visibility="collapsed")
 
-    st.markdown('<p style="color:#93b9d4; font-size:0.83rem; font-weight:600; margin-top:12px;">📂 월간결산 파일 (선택)</p>', unsafe_allow_html=True)
-    file_summary = st.file_uploader("월간결산 xlsx", type=["xlsx","xls"], key="sum",
-                                     label_visibility="collapsed")
-
     st.markdown("---")
     st.markdown('<p style="color:#93b9d4; font-size:0.83rem;">🔧 보고서 옵션</p>', unsafe_allow_html=True)
     show_rawdata = st.checkbox("원본 데이터 테이블 표시", value=False)
@@ -508,12 +470,11 @@ st.markdown(f"""
 # ─────────────────────────────────────────────
 # 파일 없을 때 안내
 # ─────────────────────────────────────────────
-if not file_curr and not file_prev and not file_summary:
+if not file_curr and not file_prev:
     st.markdown("""
     <div class="info-box">
         ℹ️ 좌측 사이드바에서 <b>이번달</b> 및 <b>저번달 접수현황 파일(xlsx)</b>을 업로드하면
-        자동으로 비교 분석 보고서가 생성됩니다.<br>
-        월간결산 파일은 선택사항입니다.
+        자동으로 비교 분석 보고서가 생성됩니다.
     </div>
     """, unsafe_allow_html=True)
 
@@ -558,10 +519,9 @@ if not file_curr and not file_prev and not file_summary:
 # ─────────────────────────────────────────────
 df_curr = load_detail_file(file_curr) if file_curr else None
 df_prev = load_detail_file(file_prev) if file_prev else None
-df_sum  = load_summary_file(file_summary) if file_summary else None
 
 # 내원경로 정규화
-for df in [df_curr, df_prev, df_sum]:
+for df in [df_curr, df_prev]:
     if df is not None and '내원경로' in df.columns:
         df['내원경로'] = df['내원경로'].apply(normalize_route)
 
@@ -1162,10 +1122,6 @@ with tabs[8]:
         if '접수일자' in df_show2.columns:
             df_show2['접수일자'] = pd.to_datetime(df_show2['접수일자']).dt.strftime('%Y-%m-%d')
         st.dataframe(df_show2, use_container_width=True, hide_index=True)
-
-    if df_sum is not None:
-        st.markdown(f"**월간결산** — {len(df_sum):,}건")
-        st.dataframe(df_sum.head(200), use_container_width=True, hide_index=True)
 
 
 # ─────────────────────────────────────────────────
